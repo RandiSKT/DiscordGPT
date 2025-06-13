@@ -1,4 +1,3 @@
-require("dotenv").config();
 // =================================================================
 // CÓDIGO DE DEPURAÇÃO - Adicione no topo do seu arquivo
 console.log("--- INICIANDO VERIFICAÇÃO DE VARIÁVEIS DE AMBIENTE ---");
