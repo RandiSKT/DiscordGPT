@@ -1,6 +1,6 @@
-/.git
-/node_modules
-.dockerignore
+.git
+.github
+node_modules
 .env
 Dockerfile
-fly.toml
+.dockerignore
