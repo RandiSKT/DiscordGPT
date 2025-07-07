@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 // =================================================================
 // CÓDIGO DE DEPURAÇÃO - Adicione no topo do seu arquivo
 console.log("--- INICIANDO VERIFICAÇÃO DE VARIÁVEIS DE AMBIENTE ---");
@@ -90,6 +92,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     try {
       const token = await obterTokenHotmart();
       const comprado = await verificarCompraHotmart(email, token);
+      console.log("🔐 Token gerado:", token);
+      listarTodasCompras(token)
 
       if (!comprado) {
         return await interaction.editReply(
@@ -116,39 +120,103 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-// SUBSTITUA A FUNÇÃO ANTIGA POR ESTA
-async function obterTokenHotmart() {
-  const url = "https://api-sec-vlc.hotmart.com/security/oauth/token";
-
-  // Os seus segredos da Hotmart precisam estar disponíveis em process.env
-  const payload = `grant_type=client_credentials&client_id=${process.env.HOTMART_CLIENT_ID}&client_secret=${process.env.HOTMART_CLIENT_SECRET}`;
+async function listarTodasCompras(token) {
+  const url = `https://developers.hotmart.com/payments/api/v1/sales`;
 
   try {
-    // Usando apenas o axios, que é o correto para Node.js
-    const response = await axios.post(url, payload, {
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    const response = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` }
     });
 
-    // O axios já retorna os dados no formato correto em `response.data`
-    return response.data.access_token;
+    console.log("Vendas retornadas:", JSON.stringify(response.data, null, 2));
   } catch (error) {
-    // Adiciona um log de erro mais claro caso a autenticação com a Hotmart falhe
-    console.error(
-      "Erro ao obter token da Hotmart:",
-      error.response ? error.response.data : error.message
-    );
-    throw new Error("Falha na autenticação com a Hotmart.");
+    console.error("Erro ao listar vendas:");
+    if (error.response) {
+      console.log("Status:", error.response.status);
+      console.log("Data:", error.response.data);
+    } else {
+      console.log("Mensagem:", error.message);
+    }
   }
 }
-async function verificarCompraHotmart(email, token) {
-  const url = `https://api.hotmart.com/payments/api/v1/sales`;
-  const response = await axios.get(url, {
-    headers: { Authorization: `Bearer ${token}` },
-    params: { email: email },
-  });
 
-  return response.data.items && response.data.items.length > 0;
+const https = require('follow-redirects').https;
+
+async function obterTokenHotmart() {
+  return new Promise((resolve, reject) => {
+    const options = {
+      method: 'POST',
+      hostname: 'api-sec-vlc.hotmart.com',
+      path: '/security/oauth/token?grant_type=client_credentials&client_id=ebd2c1fb-1c67-4906-a073-2450ecd1470c&client_secret=7b2e3623-d6b9-4f9c-b4d0-7acb6aab64cb',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic ZWJkMmMxZmItMWM2Ny00OTA2LWEwNzMtMjQ1MGVjZDE0NzBjOjdiMmUzNjIzLWQ2YjktNGY5Yy1iNGQwLTdhY2I2YWFiNjRjYg=='
+      },
+      maxRedirects: 20
+    };
+
+    const req = https.request(options, (res) => {
+      let chunks = [];
+
+      res.on('data', (chunk) => {
+        chunks.push(chunk);
+      });
+
+      res.on('end', () => {
+        const body = Buffer.concat(chunks).toString();
+        try {
+          const json = JSON.parse(body);
+          if (json.access_token) {
+            console.log("🔑 Token recebido com sucesso.");
+            resolve(json.access_token);
+          } else {
+            console.error("❌ Resposta sem token:", body);
+            reject(new Error("Token inválido"));
+          }
+        } catch (err) {
+          console.error("❌ Erro ao parsear resposta:", body);
+          reject(err);
+        }
+      });
+
+      res.on('error', (err) => {
+        console.error("❌ Erro na requisição:", err);
+        reject(err);
+      });
+    });
+
+    req.end();
+  });
 }
+
+
+async function verificarCompraHotmart(email, token) {
+  const url = "https://developers.hotmart.com/payments/api/v1/sales/history?transaction_status=APPROVED";
+
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      }
+    });
+
+    const vendas = response.data?.items || [];
+    const encontrou = vendas.some(venda => 
+      venda.buyer?.email?.toLowerCase() === email.toLowerCase()
+    );
+
+    console.log("📦 Vendas encontradas:", vendas.length);
+    console.log("🔍 Email buscado:", email);
+    console.log("✅ Compra encontrada?", encontrou);
+
+    return encontrou;
+  } catch (error) {
+    console.error("❌ Erro ao consultar histórico de vendas:", error.response?.data || error.message);
+    return false;
+  }
+}
+
 
 client.login(DISCORD_TOKEN);
 
